@@ -1,0 +1,23 @@
+
+workflows:
+  hnmod-ios:
+    name: HN Mod iOS Ad Hoc
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: HNModASC
+    environment:
+      ios_signing:
+        distribution_type: ad_hoc
+        bundle_identifier: com.hoainam.hnmod
+      xcode: latest
+    scripts:
+      - name: Extract HN Mod project
+        script: |
+          unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
+      - name: Apply signing profiles
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: xcode-project build-ipa --project "$CM_BUILD_DIR/HNMod.xcodeproj" --scheme HNMod
+    artifacts:
+      - build/ios/ipa/*.ipa
