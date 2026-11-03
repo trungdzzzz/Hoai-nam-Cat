@@ -14,80 +14,46 @@ workflows:
           set -e
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
 
-          echo "=== Project files ==="
-          find "$CM_BUILD_DIR" -name "HNMod.xcodeproj" -o -name "AppLogo.png" -o -name "Assets.xcassets"
+          echo "=== Locate source files ==="
+          find "$CM_BUILD_DIR" -name "ContentView.swift" -o -name "Info.plist" -o -name "AppLogo.png"
 
-      - name: Prepare app resources
+      - name: Prepare project files
         script: |
           set -e
           cd "$CM_BUILD_DIR"
 
-          if [ ! -f AppLogo.png ]; then
-            LOGO=$(find "$CM_BUILD_DIR" -type f -name "AppLogo.png" -not -path "*/build/*" -print -quit)
-            if [ -n "$LOGO" ]; then
-              cp "$LOGO" AppLogo.png
-            else
-              echo "Creating placeholder AppLogo.png"
-              python3 - <<'PY'
-          import struct, zlib
-          w = h = 1
-          raw = b'\x00\x30\x70\xD0'
-          def chunk(t, d):
-              return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t+d) & 0xffffffff)
-          png = b'\x89PNG\r\n\x1a\n'
-          png += chunk(b'IHDR', struct.pack(">2I5B", w, h, 8, 6, 0, 0, 0))
-          png += chunk(b'IDAT', zlib.compress(raw))
-          png += chunk(b'IEND', b'')
-          open("AppLogo.png", "wb").write(png)
-          PY
+          SOURCE=$(find "$CM_BUILD_DIR" -name "ContentView.swift" -not -path "*/build/*" -print -quit)
+
+          if [ -z "$SOURCE" ]; then
+            echo "ERROR: ContentView.swift not found"
+            exit 1
+          fi
+
+          SOURCE_DIR=$(dirname "$SOURCE")
+          echo "Source folder: $SOURCE_DIR"
+
+          for FILE in ContentView.swift Info.plist AppLogo.png; do
+            if [ -f "$SOURCE_DIR/$FILE" ]; then
+              cp "$SOURCE_DIR/$FILE" "$CM_BUILD_DIR/$FILE"
+            fi
+          done
+
+          if [ ! -f "$CM_BUILD_DIR/AppLogo.png" ]; then
+            echo "ERROR: AppLogo.png not found"
+            exit 1
+          fi
+
+          if [ ! -d "$CM_BUILD_DIR/Assets.xcassets" ]; then
+            ASSETS=$(find "$CM_BUILD_DIR" -type d -name "Assets.xcassets" -not -path "*/build/*" -print -quit)
+            if [ -n "$ASSETS" ]; then
+              cp -R "$ASSETS" "$CM_BUILD_DIR/Assets.xcassets"
             fi
           fi
 
-          if [ ! -d Assets.xcassets ]; then
-            SOURCE=$(find "$CM_BUILD_DIR" -type d -name "Assets.xcassets" -not -path "*/build/*" -print -quit)
-            if [ -n "$SOURCE" ]; then
-              cp -R "$SOURCE" Assets.xcassets
-            fi
-          fi
-
-          mkdir -p Assets.xcassets/AppIcon.appiconset
-
-          if [ ! -f Assets.xcassets/AppIcon.appiconset/AppIcon.png ]; then
-            python3 - <<'PY'
-          import struct, zlib
-          w = h = 1024
-          row = b'\x00' + bytes([35, 105, 220, 255]) * w
-          raw = row * h
-          def chunk(t, d):
-              return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t+d) & 0xffffffff)
-          png = b'\x89PNG\r\n\x1a\n'
-          png += chunk(b'IHDR', struct.pack(">2I5B", w, h, 8, 6, 0, 0, 0))
-          png += chunk(b'IDAT', zlib.compress(raw))
-          png += chunk(b'IEND', b'')
-          open("Assets.xcassets/AppIcon.appiconset/AppIcon.png", "wb").write(png)
-          PY
-          fi
-
-          cat > Assets.xcassets/AppIcon.appiconset/Contents.json <<'JSON'
-          {
-            "images": [
-              {
-                "filename": "AppIcon.png",
-                "idiom": "universal",
-                "platform": "ios",
-                "size": "1024x1024"
-              }
-            ],
-            "info": {
-              "author": "xcode",
-              "version": 1
-            }
-          }
-          JSON
-
-          echo "=== Resources prepared ==="
-          ls -la Assets.xcassets/AppIcon.appiconset
-          ls -la AppLogo.png
+          echo "=== Verify files ==="
+          ls -la "$CM_BUILD_DIR/ContentView.swift"
+          ls -la "$CM_BUILD_DIR/AppLogo.png"
+          ls -ld "$CM_BUILD_DIR/Assets.xcassets"
 
       - name: Build unsigned IPA
         script: |
