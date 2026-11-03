@@ -14,25 +14,85 @@ workflows:
           set -e
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
 
-          echo "=== Checking project ==="
-          ls -la "$CM_BUILD_DIR"
-          find "$CM_BUILD_DIR" -name "HNMod.xcodeproj" -o -name "AppLogo.png"
+          echo "=== Project files ==="
+          find "$CM_BUILD_DIR" -name "HNMod.xcodeproj" -o -name "AppLogo.png" -o -name "Assets.xcassets"
+
+      - name: Prepare app resources
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+
+          if [ ! -f AppLogo.png ]; then
+            LOGO=$(find "$CM_BUILD_DIR" -type f -name "AppLogo.png" -not -path "*/build/*" -print -quit)
+            if [ -n "$LOGO" ]; then
+              cp "$LOGO" AppLogo.png
+            else
+              echo "Creating placeholder AppLogo.png"
+              python3 - <<'PY'
+          import struct, zlib
+          w = h = 1
+          raw = b'\x00\x30\x70\xD0'
+          def chunk(t, d):
+              return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t+d) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n'
+          png += chunk(b'IHDR', struct.pack(">2I5B", w, h, 8, 6, 0, 0, 0))
+          png += chunk(b'IDAT', zlib.compress(raw))
+          png += chunk(b'IEND', b'')
+          open("AppLogo.png", "wb").write(png)
+          PY
+            fi
+          fi
+
+          if [ ! -d Assets.xcassets ]; then
+            SOURCE=$(find "$CM_BUILD_DIR" -type d -name "Assets.xcassets" -not -path "*/build/*" -print -quit)
+            if [ -n "$SOURCE" ]; then
+              cp -R "$SOURCE" Assets.xcassets
+            fi
+          fi
+
+          mkdir -p Assets.xcassets/AppIcon.appiconset
+
+          if [ ! -f Assets.xcassets/AppIcon.appiconset/AppIcon.png ]; then
+            python3 - <<'PY'
+          import struct, zlib
+          w = h = 1024
+          row = b'\x00' + bytes([35, 105, 220, 255]) * w
+          raw = row * h
+          def chunk(t, d):
+              return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t+d) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n'
+          png += chunk(b'IHDR', struct.pack(">2I5B", w, h, 8, 6, 0, 0, 0))
+          png += chunk(b'IDAT', zlib.compress(raw))
+          png += chunk(b'IEND', b'')
+          open("Assets.xcassets/AppIcon.appiconset/AppIcon.png", "wb").write(png)
+          PY
+          fi
+
+          cat > Assets.xcassets/AppIcon.appiconset/Contents.json <<'JSON'
+          {
+            "images": [
+              {
+                "filename": "AppIcon.png",
+                "idiom": "universal",
+                "platform": "ios",
+                "size": "1024x1024"
+              }
+            ],
+            "info": {
+              "author": "xcode",
+              "version": 1
+            }
+          }
+          JSON
+
+          echo "=== Resources prepared ==="
+          ls -la Assets.xcassets/AppIcon.appiconset
+          ls -la AppLogo.png
 
       - name: Build unsigned IPA
         script: |
           set -e
 
-          echo "=== Fixing missing AppLogo.png ==="
-          LOGO=$(find "$CM_BUILD_DIR" -type f -name "AppLogo.png" -not -path "*/build/*" -print -quit)
-
-          if [ -n "$LOGO" ]; then
-            cp "$LOGO" "$CM_BUILD_DIR/AppLogo.png"
-          else
-            echo "Creating placeholder AppLogo.png"
-            python3 -c 'import struct,zlib; w=h=1; raw=b"\x00\x00\x00\x00\x00"; chunk=lambda t,d: struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xffffffff); open("'"$CM_BUILD_DIR"'/AppLogo.png","wb").write(b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",struct.pack(">2I5B",w,h,8,6,0,0,0))+chunk(b"IDAT",zlib.compress(raw))+chunk(b"IEND",b""))'
-          fi
-
-          echo "=== Building HN Mod ==="
           xcodebuild \
             -project "$CM_BUILD_DIR/HNMod.xcodeproj" \
             -scheme HNMod \
@@ -45,16 +105,11 @@ workflows:
       - name: Package IPA
         script: |
           set -e
-
           mkdir -p "$CM_BUILD_DIR/Payload"
 
           APP_PATH="$CM_BUILD_DIR/build/Build/Products/Release-iphoneos/HNMod.app"
 
-          if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: HNMod.app not found"
-            exit 1
-          fi
-
+          test -d "$APP_PATH"
           cp -R "$APP_PATH" "$CM_BUILD_DIR/Payload/"
           cd "$CM_BUILD_DIR"
           zip -r HNMod.ipa Payload
