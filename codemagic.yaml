@@ -9,6 +9,7 @@ workflows:
       - name: Extract HN Mod project
         script: |
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
+          find "$CM_BUILD_DIR" -name "AppLogo.png"
 
       - name: Build unsigned IPA
         script: |
