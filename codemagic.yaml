@@ -1,3 +1,4 @@
+
 workflows:
   hnmod-ios:
     name: HN Mod IPA
@@ -9,30 +10,32 @@ workflows:
       - name: Extract HN Mod project
         script: |
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
-          find "$CM_BUILD_DIR" -name "AppLogo.png"
+          echo "=== Project files ==="
+          find "$CM_BUILD_DIR" -name "AppLogo.png" -o -name "HNMod.xcodeproj"
 
-#!/usr/bin/env bash
-set -e
+      - name: Build unsigned IPA
+        script: |
+          set -e
+          echo "=== Checking AppLogo.png ==="
+          find "$CM_BUILD_DIR" -name "AppLogo.png" -print
+          xcodebuild \
+            -project "$CM_BUILD_DIR/HNMod.xcodeproj" \
+            -scheme HNMod \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$CM_BUILD_DIR/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
 
-echo "=== Checking project files ==="
-ls -la "$CM_BUILD_DIR"
-find "$CM_BUILD_DIR" -name "AppLogo.png" -print
-
-echo "=== Building HN Mod ==="
-xcodebuild \
-  -project "$CM_BUILD_DIR/HNMod.xcodeproj" \
-  -scheme HNMod \
-  -configuration Release \
-  -sdk iphoneos \
-  -derivedDataPath "$CM_BUILD_DIR/build" \
-  CODE_SIGNING_ALLOWED=NO \
-  build
       - name: Package IPA
         script: |
-          mkdir -p Payload
+          set -e
+          mkdir -p "$CM_BUILD_DIR/Payload"
           APP_PATH="$CM_BUILD_DIR/build/Build/Products/Release-iphoneos/HNMod.app"
-          cp -R "$APP_PATH" Payload/
-          zip -r "$CM_BUILD_DIR/HNMod.ipa" Payload
+          test -d "$APP_PATH"
+          cp -R "$APP_PATH" "$CM_BUILD_DIR/Payload/"
+          cd "$CM_BUILD_DIR"
+          zip -r HNMod.ipa Payload
 
     artifacts:
       - HNMod.ipa
