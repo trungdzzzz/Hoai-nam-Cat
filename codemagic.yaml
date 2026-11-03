@@ -4,20 +4,35 @@ workflows:
     name: HN Mod IPA
     max_build_duration: 60
     instance_type: mac_mini_m2
+
     environment:
       xcode: latest
+
     scripts:
       - name: Extract HN Mod project
         script: |
+          set -e
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
-          echo "=== Project files ==="
-          find "$CM_BUILD_DIR" -name "AppLogo.png" -o -name "HNMod.xcodeproj"
+
+          echo "=== Checking project ==="
+          ls -la "$CM_BUILD_DIR"
+          find "$CM_BUILD_DIR" -name "HNMod.xcodeproj" -o -name "AppLogo.png"
 
       - name: Build unsigned IPA
         script: |
           set -e
-          echo "=== Checking AppLogo.png ==="
-          find "$CM_BUILD_DIR" -name "AppLogo.png" -print
+
+          echo "=== Fixing missing AppLogo.png ==="
+          LOGO=$(find "$CM_BUILD_DIR" -type f -name "AppLogo.png" -not -path "*/build/*" -print -quit)
+
+          if [ -n "$LOGO" ]; then
+            cp "$LOGO" "$CM_BUILD_DIR/AppLogo.png"
+          else
+            echo "Creating placeholder AppLogo.png"
+            python3 -c 'import struct,zlib; w=h=1; raw=b"\x00\x00\x00\x00\x00"; chunk=lambda t,d: struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xffffffff); open("'"$CM_BUILD_DIR"'/AppLogo.png","wb").write(b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",struct.pack(">2I5B",w,h,8,6,0,0,0))+chunk(b"IDAT",zlib.compress(raw))+chunk(b"IEND",b""))'
+          fi
+
+          echo "=== Building HN Mod ==="
           xcodebuild \
             -project "$CM_BUILD_DIR/HNMod.xcodeproj" \
             -scheme HNMod \
@@ -30,9 +45,16 @@ workflows:
       - name: Package IPA
         script: |
           set -e
+
           mkdir -p "$CM_BUILD_DIR/Payload"
+
           APP_PATH="$CM_BUILD_DIR/build/Build/Products/Release-iphoneos/HNMod.app"
-          test -d "$APP_PATH"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: HNMod.app not found"
+            exit 1
+          fi
+
           cp -R "$APP_PATH" "$CM_BUILD_DIR/Payload/"
           cd "$CM_BUILD_DIR"
           zip -r HNMod.ipa Payload
