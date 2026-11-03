@@ -11,17 +11,22 @@ workflows:
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
           find "$CM_BUILD_DIR" -name "AppLogo.png"
 
-      - name: Build unsigned IPA
-        script: |
-          xcodebuild \
-            -project "$CM_BUILD_DIR/HNMod.xcodeproj" \
-            -scheme HNMod \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath "$CM_BUILD_DIR/build" \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+#!/usr/bin/env bash
+set -e
 
+echo "=== Checking project files ==="
+ls -la "$CM_BUILD_DIR"
+find "$CM_BUILD_DIR" -name "AppLogo.png" -print
+
+echo "=== Building HN Mod ==="
+xcodebuild \
+  -project "$CM_BUILD_DIR/HNMod.xcodeproj" \
+  -scheme HNMod \
+  -configuration Release \
+  -sdk iphoneos \
+  -derivedDataPath "$CM_BUILD_DIR/build" \
+  CODE_SIGNING_ALLOWED=NO \
+  build
       - name: Package IPA
         script: |
           mkdir -p Payload
