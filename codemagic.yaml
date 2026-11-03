@@ -91,8 +91,19 @@ workflows:
           ls -lah "$APP_PATH"
           du -sh "$APP_PATH"
 
-          EXECUTABLE=$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP_PATH/Info.plist")
-          test -f "$APP_PATH/$EXECUTABLE"
+          echo "=== Fix application Info.plist ==="
+          PLIST="$APP_PATH/Info.plist"
+
+          /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string HNMod" "$PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable HNMod" "$PLIST"
+
+          /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :CFBundlePackageType APPL" "$PLIST"
+
+          test -f "$APP_PATH/HNMod"
+
+          echo "=== Verify executable key ==="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST"
 
           echo "=== Package IPA ==="
           rm -rf Payload HNMod.ipa HNMod-download.zip
