@@ -15,7 +15,7 @@ workflows:
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
 
           echo "=== Locate source files ==="
-          find "$CM_BUILD_DIR" -name "ContentView.swift" -o -name "Info.plist" -o -name "AppLogo.png"
+          find "$CM_BUILD_DIR" \( -name "ContentView.swift" -o -name "Info.plist" -o -name "AppLogo.png" \) -not -path "*/build/*"
 
       - name: Prepare project files
         script: |
@@ -30,17 +30,21 @@ workflows:
           fi
 
           SOURCE_DIR=$(dirname "$SOURCE")
-          echo "Source folder: $SOURCE_DIR"
 
-          for FILE in ContentView.swift Info.plist AppLogo.png; do
-            if [ -f "$SOURCE_DIR/$FILE" ]; then
-              cp "$SOURCE_DIR/$FILE" "$CM_BUILD_DIR/$FILE"
-            fi
-          done
+          cp "$SOURCE" "$CM_BUILD_DIR/ContentView.swift"
+
+          if [ -f "$SOURCE_DIR/Info.plist" ]; then
+            cp "$SOURCE_DIR/Info.plist" "$CM_BUILD_DIR/Info.plist"
+          fi
 
           if [ ! -f "$CM_BUILD_DIR/AppLogo.png" ]; then
-            echo "ERROR: AppLogo.png not found"
-            exit 1
+            LOGO=$(find "$CM_BUILD_DIR" -name "AppLogo.png" -not -path "*/build/*" -print -quit)
+            if [ -n "$LOGO" ]; then
+              cp "$LOGO" "$CM_BUILD_DIR/AppLogo.png"
+            else
+              echo "ERROR: AppLogo.png not found"
+              exit 1
+            fi
           fi
 
           if [ ! -d "$CM_BUILD_DIR/Assets.xcassets" ]; then
@@ -51,9 +55,9 @@ workflows:
           fi
 
           echo "=== Verify files ==="
-          ls -la "$CM_BUILD_DIR/ContentView.swift"
-          ls -la "$CM_BUILD_DIR/AppLogo.png"
-          ls -ld "$CM_BUILD_DIR/Assets.xcassets"
+          test -f "$CM_BUILD_DIR/ContentView.swift"
+          test -f "$CM_BUILD_DIR/AppLogo.png"
+          test -d "$CM_BUILD_DIR/Assets.xcassets"
 
       - name: Build unsigned IPA
         script: |
@@ -71,14 +75,21 @@ workflows:
       - name: Package IPA
         script: |
           set -e
-          mkdir -p "$CM_BUILD_DIR/Payload"
+          cd "$CM_BUILD_DIR"
+
+          mkdir -p Payload
 
           APP_PATH="$CM_BUILD_DIR/build/Build/Products/Release-iphoneos/HNMod.app"
 
           test -d "$APP_PATH"
-          cp -R "$APP_PATH" "$CM_BUILD_DIR/Payload/"
-          cd "$CM_BUILD_DIR"
+
+          cp -R "$APP_PATH" Payload/
           zip -r HNMod.ipa Payload
 
+          zip -j HNMod-download.zip HNMod.ipa
+
+          echo "=== Check output files ==="
+          ls -lh HNMod.ipa HNMod-download.zip
+
     artifacts:
-      - HNMod.ipa
+      - HNMod-download.zip
