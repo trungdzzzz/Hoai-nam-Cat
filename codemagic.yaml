@@ -15,7 +15,9 @@ workflows:
           unzip -o HN_Mod_iOS_AdHoc_Project.zip -d "$CM_BUILD_DIR"
 
           echo "=== Locate source files ==="
-          find "$CM_BUILD_DIR" \( -name "ContentView.swift" -o -name "Info.plist" -o -name "AppLogo.png" \) -not -path "*/build/*"
+          find "$CM_BUILD_DIR" \
+            \( -name "ContentView.swift" -o -name "Info.plist" -o -name "AppLogo.png" \) \
+            -not -path "*/build/*"
 
       - name: Prepare project files
         script: |
@@ -29,12 +31,13 @@ workflows:
             exit 1
           fi
 
-          SOURCE_DIR=$(dirname "$SOURCE")
-
           cp "$SOURCE" "$CM_BUILD_DIR/ContentView.swift"
 
-          if [ -f "$SOURCE_DIR/Info.plist" ]; then
-            cp "$SOURCE_DIR/Info.plist" "$CM_BUILD_DIR/Info.plist"
+          if [ ! -f "$CM_BUILD_DIR/Info.plist" ]; then
+            PLIST=$(find "$CM_BUILD_DIR" -name "Info.plist" -not -path "*/build/*" -print -quit)
+            if [ -n "$PLIST" ]; then
+              cp "$PLIST" "$CM_BUILD_DIR/Info.plist"
+            fi
           fi
 
           if [ ! -f "$CM_BUILD_DIR/AppLogo.png" ]; then
@@ -51,15 +54,19 @@ workflows:
             ASSETS=$(find "$CM_BUILD_DIR" -type d -name "Assets.xcassets" -not -path "*/build/*" -print -quit)
             if [ -n "$ASSETS" ]; then
               cp -R "$ASSETS" "$CM_BUILD_DIR/Assets.xcassets"
+            else
+              echo "ERROR: Assets.xcassets not found"
+              exit 1
             fi
           fi
 
-          echo "=== Verify files ==="
+          echo "=== Verify project files ==="
           test -f "$CM_BUILD_DIR/ContentView.swift"
           test -f "$CM_BUILD_DIR/AppLogo.png"
           test -d "$CM_BUILD_DIR/Assets.xcassets"
+          test -d "$CM_BUILD_DIR/HNMod.xcodeproj"
 
-      - name: Build unsigned IPA
+      - name: Build unsigned app
         script: |
           set -e
 
@@ -72,24 +79,45 @@ workflows:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Package IPA
+      - name: Package and verify IPA
         script: |
           set -e
           cd "$CM_BUILD_DIR"
 
-          mkdir -p Payload
-
           APP_PATH="$CM_BUILD_DIR/build/Build/Products/Release-iphoneos/HNMod.app"
 
+          echo "=== Check built app ==="
           test -d "$APP_PATH"
+          ls -lah "$APP_PATH"
+          du -sh "$APP_PATH"
 
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP_PATH/Info.plist")
+          test -f "$APP_PATH/$EXECUTABLE"
+
+          echo "=== Package IPA ==="
+          rm -rf Payload HNMod.ipa HNMod-download.zip
+          mkdir Payload
           cp -R "$APP_PATH" Payload/
-          zip -r HNMod.ipa Payload
+
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload HNMod.ipa
+
+          echo "=== Verify IPA ==="
+          unzip -l HNMod.ipa
+          test -s HNMod.ipa
+
+          SIZE=$(stat -f%z HNMod.ipa)
+          echo "IPA size: $SIZE bytes"
+
+          if [ "$SIZE" -lt 500000 ]; then
+            echo "ERROR: IPA is unexpectedly small"
+            exit 1
+          fi
 
           zip -j HNMod-download.zip HNMod.ipa
 
-          echo "=== Check output files ==="
+          echo "=== Final files ==="
           ls -lh HNMod.ipa HNMod-download.zip
 
     artifacts:
+      - HNMod.ipa
       - HNMod-download.zip
